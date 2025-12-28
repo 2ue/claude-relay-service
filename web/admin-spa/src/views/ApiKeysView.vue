@@ -632,12 +632,14 @@
                       <!-- 限制 -->
                       <td class="px-2 py-2" style="font-size: 12px">
                         <div class="flex flex-col gap-2">
-                          <!-- 加载中状态 - 骨架屏（仅在有费用限制配置时显示） -->
+                          <!-- 加载中状态 - 骨架屏（仅在有费用限制或请求限制配置时显示） -->
                           <template
                             v-if="
                               isStatsLoading(key.id) &&
                               (key.dailyCostLimit > 0 ||
                                 key.totalCostLimit > 0 ||
+                                key.dailyRequestLimit > 0 ||
+                                key.totalRequestLimit > 0 ||
                                 (key.rateLimitWindow > 0 && key.rateLimitCost > 0))
                             "
                           >
@@ -715,9 +717,37 @@
                               </div>
                             </div>
 
+                            <!-- 每日请求限制进度条 -->
+                            <LimitProgressBar
+                              v-if="key.dailyRequestLimit > 0"
+                              :current="key.dailyRequests || 0"
+                              is-request-limit
+                              label="日请求"
+                              :limit="key.dailyRequestLimit"
+                              type="daily"
+                              variant="compact"
+                            />
+
+                            <!-- 总请求限制进度条（无每日限制时展示） -->
+                            <LimitProgressBar
+                              v-else-if="key.totalRequestLimit > 0"
+                              :current="key.totalRequests || 0"
+                              is-request-limit
+                              label="总请求"
+                              :limit="key.totalRequestLimit"
+                              type="total"
+                              variant="compact"
+                            />
+
                             <!-- 如果没有任何限制 -->
                             <div
-                              v-else
+                              v-if="
+                                !key.dailyCostLimit &&
+                                !key.totalCostLimit &&
+                                !key.dailyRequestLimit &&
+                                !key.totalRequestLimit &&
+                                !(key.rateLimitWindow > 0 && key.rateLimitCost > 0)
+                              "
                               class="flex items-center justify-center gap-1.5 py-2 text-gray-500 dark:text-gray-400"
                             >
                               <i class="fas fa-infinity text-base" />
@@ -1467,12 +1497,14 @@
 
                 <!-- 限制进度条 -->
                 <div class="space-y-2">
-                  <!-- 加载中状态 - 骨架屏（仅在有费用限制配置时显示） -->
+                  <!-- 加载中状态 - 骨架屏（仅在有费用限制或请求限制配置时显示） -->
                   <template
                     v-if="
                       isStatsLoading(key.id) &&
                       (key.dailyCostLimit > 0 ||
                         key.totalCostLimit > 0 ||
+                        key.dailyRequestLimit > 0 ||
+                        key.totalRequestLimit > 0 ||
                         (key.rateLimitWindow > 0 && key.rateLimitCost > 0))
                     "
                   >
@@ -1550,9 +1582,37 @@
                       </div>
                     </div>
 
+                    <!-- 每日请求限制进度条 -->
+                    <LimitProgressBar
+                      v-if="key.dailyRequestLimit > 0"
+                      :current="key.dailyRequests || 0"
+                      is-request-limit
+                      label="日请求"
+                      :limit="key.dailyRequestLimit"
+                      type="daily"
+                      variant="compact"
+                    />
+
+                    <!-- 总请求限制进度条（无每日限制时展示） -->
+                    <LimitProgressBar
+                      v-else-if="key.totalRequestLimit > 0"
+                      :current="key.totalRequests || 0"
+                      is-request-limit
+                      label="总请求"
+                      :limit="key.totalRequestLimit"
+                      type="total"
+                      variant="compact"
+                    />
+
                     <!-- 无限制显示 -->
                     <div
-                      v-else
+                      v-if="
+                        !key.dailyCostLimit &&
+                        !key.totalCostLimit &&
+                        !key.dailyRequestLimit &&
+                        !key.totalRequestLimit &&
+                        !(key.rateLimitWindow > 0 && key.rateLimitCost > 0)
+                      "
                       class="flex items-center justify-center gap-1.5 py-2 text-gray-500 dark:text-gray-400"
                     >
                       <i class="fas fa-infinity text-base" />

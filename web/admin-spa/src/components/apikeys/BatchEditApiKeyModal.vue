@@ -250,6 +250,40 @@
             </p>
           </div>
 
+          <!-- 每日请求限制 -->
+          <div>
+            <label class="mb-3 block text-sm font-semibold text-gray-700 dark:text-gray-300">
+              每日请求限制 (次)
+            </label>
+            <input
+              v-model="form.dailyRequestLimit"
+              class="form-input w-full border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
+              min="0"
+              placeholder="不修改 (0 表示无限制)"
+              type="number"
+            />
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              设置此 API Key 每日的请求次数限制，超过限制将拒绝请求
+            </p>
+          </div>
+
+          <!-- 总请求限制 -->
+          <div>
+            <label class="mb-3 block text-sm font-semibold text-gray-700 dark:text-gray-300">
+              总请求限制 (次)
+            </label>
+            <input
+              v-model="form.totalRequestLimit"
+              class="form-input w-full border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
+              min="0"
+              placeholder="不修改 (0 表示无限制)"
+              type="number"
+            />
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              设置此 API Key 的累计总请求次数限制，达到限制后将拒绝所有后续请求
+            </p>
+          </div>
+
           <!-- 并发限制 -->
           <div>
             <label class="mb-3 block text-sm font-semibold text-gray-700 dark:text-gray-300"
@@ -511,6 +545,8 @@ const form = reactive({
   dailyCostLimit: '',
   totalCostLimit: '',
   weeklyOpusCostLimit: '', // 新增Opus周费用限制
+  dailyRequestLimit: '', // 新增：每日请求限制
+  totalRequestLimit: '', // 新增：总请求限制
   permissions: '', // 空字符串表示不修改
   claudeAccountId: '',
   geminiAccountId: '',
@@ -734,6 +770,12 @@ const batchUpdateApiKeys = async () => {
     }
     if (form.weeklyOpusCostLimit !== '' && form.weeklyOpusCostLimit !== null) {
       updates.weeklyOpusCostLimit = parseFloat(form.weeklyOpusCostLimit)
+    }
+    if (form.dailyRequestLimit !== '' && form.dailyRequestLimit !== null) {
+      updates.dailyRequestLimit = parseInt(form.dailyRequestLimit)
+    }
+    if (form.totalRequestLimit !== '' && form.totalRequestLimit !== null) {
+      updates.totalRequestLimit = parseInt(form.totalRequestLimit)
     }
 
     // 权限设置

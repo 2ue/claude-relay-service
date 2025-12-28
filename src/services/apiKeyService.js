@@ -102,6 +102,8 @@ class ApiKeyService {
       dailyCostLimit = 0,
       totalCostLimit = 0,
       weeklyOpusCostLimit = 0,
+      dailyRequestLimit = 0, // 新增：每日请求次数限制
+      totalRequestLimit = 0, // 新增：总请求次数限制
       tags = [],
       activationDays = 0, // 新增：激活后有效天数（0表示不使用此功能）
       activationUnit = 'days', // 新增：激活时间单位 'hours' 或 'days'
@@ -140,6 +142,8 @@ class ApiKeyService {
       dailyCostLimit: String(dailyCostLimit || 0),
       totalCostLimit: String(totalCostLimit || 0),
       weeklyOpusCostLimit: String(weeklyOpusCostLimit || 0),
+      dailyRequestLimit: String(dailyRequestLimit || 0), // 新增：每日请求次数限制
+      totalRequestLimit: String(totalRequestLimit || 0), // 新增：总请求次数限制
       tags: JSON.stringify(tags || []),
       activationDays: String(activationDays || 0), // 新增：激活后有效天数
       activationUnit: activationUnit || 'days', // 新增：激活时间单位
@@ -194,6 +198,8 @@ class ApiKeyService {
       dailyCostLimit: parseFloat(keyData.dailyCostLimit || 0),
       totalCostLimit: parseFloat(keyData.totalCostLimit || 0),
       weeklyOpusCostLimit: parseFloat(keyData.weeklyOpusCostLimit || 0),
+      dailyRequestLimit: parseInt(keyData.dailyRequestLimit || 0), // 新增
+      totalRequestLimit: parseInt(keyData.totalRequestLimit || 0), // 新增
       tags: JSON.parse(keyData.tags || '[]'),
       activationDays: parseInt(keyData.activationDays || 0),
       activationUnit: keyData.activationUnit || 'days',
@@ -287,10 +293,12 @@ class ApiKeyService {
       // 获取使用统计（供返回数据使用）
       const usage = await redis.getUsageStats(keyData.id)
 
-      // 获取费用统计
-      const [dailyCost, costStats] = await Promise.all([
+      // 获取费用统计和请求统计
+      const [dailyCost, costStats, dailyRequests, totalRequests] = await Promise.all([
         redis.getDailyCost(keyData.id),
-        redis.getCostStats(keyData.id)
+        redis.getCostStats(keyData.id),
+        redis.getDailyRequests(keyData.id), // 新增：获取日请求数
+        redis.getTotalRequests(keyData.id) // 新增：获取总请求数
       ])
       const totalCost = costStats?.total || 0
 
@@ -351,9 +359,13 @@ class ApiKeyService {
           dailyCostLimit: parseFloat(keyData.dailyCostLimit || 0),
           totalCostLimit: parseFloat(keyData.totalCostLimit || 0),
           weeklyOpusCostLimit: parseFloat(keyData.weeklyOpusCostLimit || 0),
+          dailyRequestLimit: parseInt(keyData.dailyRequestLimit || 0), // 新增
+          totalRequestLimit: parseInt(keyData.totalRequestLimit || 0), // 新增
           dailyCost: dailyCost || 0,
           totalCost,
           weeklyOpusCost: (await redis.getWeeklyOpusCost(keyData.id)) || 0,
+          dailyRequests: dailyRequests || 0, // 新增
+          totalRequests: totalRequests || 0, // 新增
           tags,
           usage
         }
@@ -480,6 +492,8 @@ class ApiKeyService {
           dailyCostLimit: parseFloat(keyData.dailyCostLimit || 0),
           totalCostLimit: parseFloat(keyData.totalCostLimit || 0),
           weeklyOpusCostLimit: parseFloat(keyData.weeklyOpusCostLimit || 0),
+          dailyRequestLimit: parseInt(keyData.dailyRequestLimit || 0), // 新增
+          totalRequestLimit: parseInt(keyData.totalRequestLimit || 0), // 新增
           dailyCost: dailyCost || 0,
           totalCost: costStats?.total || 0,
           weeklyOpusCost: (await redis.getWeeklyOpusCost(keyData.id)) || 0,
@@ -529,8 +543,13 @@ class ApiKeyService {
         key.dailyCostLimit = parseFloat(key.dailyCostLimit || 0)
         key.totalCostLimit = parseFloat(key.totalCostLimit || 0)
         key.weeklyOpusCostLimit = parseFloat(key.weeklyOpusCostLimit || 0)
+        key.dailyRequestLimit = parseInt(key.dailyRequestLimit || 0) // 新增
+        key.totalRequestLimit = parseInt(key.totalRequestLimit || 0) // 新增
         key.dailyCost = (await redis.getDailyCost(key.id)) || 0
         key.weeklyOpusCost = (await redis.getWeeklyOpusCost(key.id)) || 0
+        // 获取请求次数统计
+        key.dailyRequests = (await redis.getDailyRequests(key.id)) || 0 // 新增
+        key.totalRequests = (await redis.getTotalRequests(key.id)) || 0 // 新增
         key.activationDays = parseInt(key.activationDays || 0)
         key.activationUnit = key.activationUnit || 'days'
         key.expirationMode = key.expirationMode || 'fixed'
@@ -696,6 +715,8 @@ class ApiKeyService {
         'dailyCostLimit',
         'totalCostLimit',
         'weeklyOpusCostLimit',
+        'dailyRequestLimit', // 新增：每日请求次数限制
+        'totalRequestLimit', // 新增：总请求次数限制
         'tags',
         'userId', // 新增：用户ID（所有者变更）
         'userUsername', // 新增：用户名（所有者变更）

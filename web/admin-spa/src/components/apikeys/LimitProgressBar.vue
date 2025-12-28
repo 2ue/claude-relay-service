@@ -17,9 +17,12 @@
           <i :class="['text-[11px]', iconClass]" />
           <span>{{ label }}</span>
         </div>
-        <span class="text-gray-700 dark:text-gray-200"
-          >${{ current.toFixed(2) }} / ${{ limit.toFixed(2) }}</span
-        >
+        <span class="text-gray-700 dark:text-gray-200">
+          <template v-if="isRequestLimit">
+            {{ formatNumber(current) }} / {{ formatNumber(limit) }} 次
+          </template>
+          <template v-else> ${{ current.toFixed(2) }} / ${{ limit.toFixed(2) }} </template>
+        </span>
       </div>
       <div class="relative h-1.5 overflow-hidden rounded-full bg-gray-200/85 dark:bg-gray-700/70">
         <div
@@ -57,7 +60,10 @@
         </div>
         <div class="flex items-center gap-1.5">
           <span class="text-xs font-bold tabular-nums" :class="currentValueClass">
-            ${{ current.toFixed(2) }} / ${{ limit.toFixed(2) }}
+            <template v-if="isRequestLimit">
+              {{ formatNumber(current) }} / {{ formatNumber(limit) }} 次
+            </template>
+            <template v-else> ${{ current.toFixed(2) }} / ${{ limit.toFixed(2) }} </template>
           </span>
         </div>
       </div>
@@ -105,8 +111,18 @@ const props = defineProps({
   showShine: {
     type: Boolean,
     default: false
+  },
+  isRequestLimit: {
+    type: Boolean,
+    default: false
   }
 })
+
+// 格式化数字，添加千分位分隔符
+const formatNumber = (num) => {
+  if (!num && num !== 0) return '0'
+  return num.toLocaleString('zh-CN')
+}
 
 const isCompact = computed(() => props.variant === 'compact')
 const progress = computed(() => {

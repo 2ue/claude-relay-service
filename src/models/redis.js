@@ -1020,6 +1020,21 @@ class RedisClient {
     return result
   }
 
+  // 📊 获取当日请求次数
+  async getDailyRequests(keyId) {
+    const today = getDateStringInTimezone()
+    const dailyKey = `usage:daily:${keyId}:${today}`
+    const data = await this.client.hget(dailyKey, 'requests')
+    return parseInt(data) || 0
+  }
+
+  // 📊 获取总请求次数
+  async getTotalRequests(keyId) {
+    const totalKey = `usage:${keyId}`
+    const data = await this.client.hget(totalKey, 'totalRequests')
+    return parseInt(data) || 0
+  }
+
   // 💰 增加当日费用
   async incrementDailyCost(keyId, amount) {
     const today = getDateStringInTimezone()

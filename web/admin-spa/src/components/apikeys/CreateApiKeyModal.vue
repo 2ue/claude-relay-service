@@ -433,6 +433,105 @@
             </div>
           </div>
 
+          <!-- 每日请求限制 -->
+          <div>
+            <label class="mb-2 block text-sm font-semibold text-gray-700 dark:text-gray-300"
+              >每日请求限制 (次)</label
+            >
+            <div class="space-y-2">
+              <div class="flex gap-2">
+                <button
+                  class="rounded bg-gray-100 px-2 py-1 text-xs font-medium hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+                  type="button"
+                  @click="form.dailyRequestLimit = '100'"
+                >
+                  100次
+                </button>
+                <button
+                  class="rounded bg-gray-100 px-2 py-1 text-xs font-medium hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+                  type="button"
+                  @click="form.dailyRequestLimit = '500'"
+                >
+                  500次
+                </button>
+                <button
+                  class="rounded bg-gray-100 px-2 py-1 text-xs font-medium hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+                  type="button"
+                  @click="form.dailyRequestLimit = '1000'"
+                >
+                  1000次
+                </button>
+                <button
+                  class="rounded bg-gray-100 px-2 py-1 text-xs font-medium hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+                  type="button"
+                  @click="form.dailyRequestLimit = ''"
+                >
+                  不限
+                </button>
+              </div>
+              <input
+                v-model="form.dailyRequestLimit"
+                class="form-input w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 dark:placeholder-gray-400"
+                min="0"
+                placeholder="0 表示无限制"
+                type="number"
+              />
+              <p class="text-xs text-gray-500 dark:text-gray-400">
+                设置此 API Key 每日的请求次数限制，超过限制将拒绝请求，0 或留空表示无限制
+              </p>
+            </div>
+          </div>
+
+          <!-- 总请求限制 -->
+          <div>
+            <label class="mb-2 block text-sm font-semibold text-gray-700 dark:text-gray-300"
+              >总请求限制 (次)</label
+            >
+            <div class="space-y-2">
+              <div class="flex gap-2">
+                <button
+                  class="rounded bg-gray-100 px-2 py-1 text-xs font-medium hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+                  type="button"
+                  @click="form.totalRequestLimit = '1000'"
+                >
+                  1000次
+                </button>
+                <button
+                  class="rounded bg-gray-100 px-2 py-1 text-xs font-medium hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+                  type="button"
+                  @click="form.totalRequestLimit = '5000'"
+                >
+                  5000次
+                </button>
+                <button
+                  class="rounded bg-gray-100 px-2 py-1 text-xs font-medium hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+                  type="button"
+                  @click="form.totalRequestLimit = '10000'"
+                >
+                  10000次
+                </button>
+                <button
+                  class="rounded bg-gray-100 px-2 py-1 text-xs font-medium hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+                  type="button"
+                  @click="form.totalRequestLimit = ''"
+                >
+                  不限
+                </button>
+              </div>
+              <input
+                v-model="form.totalRequestLimit"
+                class="form-input w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 dark:placeholder-gray-400"
+                min="0"
+                placeholder="0 表示无限制"
+                type="number"
+              />
+              <p class="text-xs text-gray-500 dark:text-gray-400">
+                设置此 API Key 的累计总请求次数限制，达到限制后将拒绝所有后续请求，0
+                或留空表示无限制
+              </p>
+            </div>
+          </div>
+
           <div>
             <label class="mb-2 block text-sm font-semibold text-gray-700 dark:text-gray-300"
               >并发限制 (可选)</label
@@ -960,6 +1059,8 @@ const form = reactive({
   dailyCostLimit: '',
   totalCostLimit: '',
   weeklyOpusCostLimit: '',
+  dailyRequestLimit: '', // 新增：每日请求限制
+  totalRequestLimit: '', // 新增：总请求限制
   expireDuration: '',
   customExpireDate: '',
   expiresAt: null,
@@ -1382,6 +1483,14 @@ const createApiKey = async () => {
       weeklyOpusCostLimit:
         form.weeklyOpusCostLimit !== '' && form.weeklyOpusCostLimit !== null
           ? parseFloat(form.weeklyOpusCostLimit)
+          : 0,
+      dailyRequestLimit:
+        form.dailyRequestLimit !== '' && form.dailyRequestLimit !== null
+          ? parseInt(form.dailyRequestLimit)
+          : 0,
+      totalRequestLimit:
+        form.totalRequestLimit !== '' && form.totalRequestLimit !== null
+          ? parseInt(form.totalRequestLimit)
           : 0,
       expiresAt: form.expirationMode === 'fixed' ? form.expiresAt || undefined : undefined,
       expirationMode: form.expirationMode,

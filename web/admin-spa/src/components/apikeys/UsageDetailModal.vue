@@ -194,6 +194,66 @@
                 </div>
               </div>
 
+              <!-- 每日请求限制 -->
+              <div v-if="apiKey.dailyRequestLimit > 0" class="space-y-1.5">
+                <div class="flex items-center justify-between">
+                  <span class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    <i class="fas fa-calendar-day mr-2 text-orange-500" />
+                    每日请求限制
+                  </span>
+                  <span class="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                    {{ formatNumber(apiKey.dailyRequests || 0) }} /
+                    {{ formatNumber(apiKey.dailyRequestLimit) }} 次
+                  </span>
+                </div>
+                <div class="h-2 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-600">
+                  <div
+                    class="h-full rounded-full transition-all duration-300"
+                    :class="
+                      dailyRequestPercentage >= 90
+                        ? 'bg-red-500'
+                        : dailyRequestPercentage >= 70
+                          ? 'bg-yellow-500'
+                          : 'bg-orange-500'
+                    "
+                    :style="{ width: Math.min(dailyRequestPercentage, 100) + '%' }"
+                  />
+                </div>
+                <div class="text-right text-xs text-gray-500 dark:text-gray-400">
+                  已使用 {{ Math.min(dailyRequestPercentage, 100).toFixed(1) }}%
+                </div>
+              </div>
+
+              <!-- 总请求限制 -->
+              <div v-if="apiKey.totalRequestLimit > 0" class="space-y-1.5">
+                <div class="flex items-center justify-between">
+                  <span class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    <i class="fas fa-infinity mr-2 text-indigo-500" />
+                    总请求限制
+                  </span>
+                  <span class="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                    {{ formatNumber(apiKey.totalRequests || 0) }} /
+                    {{ formatNumber(apiKey.totalRequestLimit) }} 次
+                  </span>
+                </div>
+                <div class="h-2 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-600">
+                  <div
+                    class="h-full rounded-full transition-all duration-300"
+                    :class="
+                      totalRequestPercentage >= 90
+                        ? 'bg-red-500'
+                        : totalRequestPercentage >= 70
+                          ? 'bg-yellow-500'
+                          : 'bg-indigo-500'
+                    "
+                    :style="{ width: Math.min(totalRequestPercentage, 100) + '%' }"
+                  />
+                </div>
+                <div class="text-right text-xs text-gray-500 dark:text-gray-400">
+                  已使用 {{ Math.min(totalRequestPercentage, 100).toFixed(1) }}%
+                </div>
+              </div>
+
               <div
                 v-if="apiKey.concurrencyLimit > 0"
                 class="flex items-center justify-between rounded-lg border border-purple-200/70 bg-white/60 px-3 py-2 text-sm shadow-sm dark:border-purple-500/40 dark:bg-purple-950/20"
@@ -285,7 +345,9 @@ const hasLimits = computed(() => {
     props.apiKey.concurrencyLimit > 0 ||
     props.apiKey.weeklyOpusCostLimit > 0 ||
     props.apiKey.rateLimitWindow > 0 ||
-    props.apiKey.tokenLimit > 0
+    props.apiKey.tokenLimit > 0 ||
+    props.apiKey.dailyRequestLimit > 0 ||
+    props.apiKey.totalRequestLimit > 0
   )
 })
 
@@ -302,6 +364,18 @@ const totalUsagePercentage = computed(() => {
 const opusUsagePercentage = computed(() => {
   if (!weeklyOpusCostLimit.value || weeklyOpusCostLimit.value === 0) return 0
   return (weeklyOpusCost.value / weeklyOpusCostLimit.value) * 100
+})
+
+// 每日请求使用百分比
+const dailyRequestPercentage = computed(() => {
+  if (!props.apiKey.dailyRequestLimit || props.apiKey.dailyRequestLimit === 0) return 0
+  return ((props.apiKey.dailyRequests || 0) / props.apiKey.dailyRequestLimit) * 100
+})
+
+// 总请求使用百分比
+const totalRequestPercentage = computed(() => {
+  if (!props.apiKey.totalRequestLimit || props.apiKey.totalRequestLimit === 0) return 0
+  return ((props.apiKey.totalRequests || 0) / props.apiKey.totalRequestLimit) * 100
 })
 
 // 方法

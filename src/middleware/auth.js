@@ -1239,6 +1239,53 @@ const authenticateApiKey = async (req, res, next) => {
       )
     }
 
+    // ========== 检查每日请求次数限制 ==========
+    const dailyRequestLimit = validation.keyData.dailyRequestLimit || 0
+    if (dailyRequestLimit > 0) {
+      const dailyRequests = validation.keyData.dailyRequests || 0
+
+      if (dailyRequests >= dailyRequestLimit) {
+        logger.security(
+          `🚫 Daily request limit exceeded for key: ${validation.keyData.id} (${validation.keyData.name}), requests: ${dailyRequests}/${dailyRequestLimit}`
+        )
+
+        return res.status(429).json({
+          error: 'Daily request limit exceeded',
+          message: `已达到每日请求限制 (${dailyRequestLimit} 次)`,
+          currentRequests: dailyRequests,
+          requestLimit: dailyRequestLimit,
+          resetAt: new Date(new Date().setHours(24, 0, 0, 0)).toISOString()
+        })
+      }
+
+      logger.api(
+        `📊 Daily request usage for key: ${validation.keyData.id} (${validation.keyData.name}), current: ${dailyRequests}/${dailyRequestLimit}`
+      )
+    }
+
+    // ========== 检查总请求次数限制 ==========
+    const totalRequestLimit = validation.keyData.totalRequestLimit || 0
+    if (totalRequestLimit > 0) {
+      const totalRequests = validation.keyData.totalRequests || 0
+
+      if (totalRequests >= totalRequestLimit) {
+        logger.security(
+          `🚫 Total request limit exceeded for key: ${validation.keyData.id} (${validation.keyData.name}), requests: ${totalRequests}/${totalRequestLimit}`
+        )
+
+        return res.status(429).json({
+          error: 'Total request limit exceeded',
+          message: `已达到总请求限制 (${totalRequestLimit} 次)`,
+          currentRequests: totalRequests,
+          requestLimit: totalRequestLimit
+        })
+      }
+
+      logger.api(
+        `📊 Total request usage for key: ${validation.keyData.id} (${validation.keyData.name}), current: ${totalRequests}/${totalRequestLimit}`
+      )
+    }
+
     // 检查 Opus 周费用限制（仅对 Opus 模型生效）
     const weeklyOpusCostLimit = validation.keyData.weeklyOpusCostLimit || 0
     if (weeklyOpusCostLimit > 0) {
@@ -1307,6 +1354,10 @@ const authenticateApiKey = async (req, res, next) => {
       dailyCost: validation.keyData.dailyCost,
       totalCostLimit: validation.keyData.totalCostLimit,
       totalCost: validation.keyData.totalCost,
+      dailyRequestLimit: validation.keyData.dailyRequestLimit, // 新增：每日请求限制
+      totalRequestLimit: validation.keyData.totalRequestLimit, // 新增：总请求限制
+      dailyRequests: validation.keyData.dailyRequests, // 新增：当日请求数
+      totalRequests: validation.keyData.totalRequests, // 新增：总请求数
       usage: validation.keyData.usage
     }
     req.usage = validation.keyData.usage
