@@ -1257,6 +1257,8 @@ router.post('/api-keys', authenticateAdmin, async (req, res) => {
       dailyCostLimit,
       totalCostLimit,
       weeklyOpusCostLimit,
+      dailyRequestLimit, // 新增：每日请求次数限制
+      totalRequestLimit, // 新增：总请求次数限制
       tags,
       activationDays, // 新增：激活后有效天数
       activationUnit, // 新增：激活时间单位 (hours/days)
@@ -1417,6 +1419,8 @@ router.post('/api-keys', authenticateAdmin, async (req, res) => {
       dailyCostLimit,
       totalCostLimit,
       weeklyOpusCostLimit,
+      dailyRequestLimit,
+      totalRequestLimit,
       tags,
       activationDays,
       activationUnit,
@@ -1459,6 +1463,8 @@ router.post('/api-keys/batch', authenticateAdmin, async (req, res) => {
       dailyCostLimit,
       totalCostLimit,
       weeklyOpusCostLimit,
+      dailyRequestLimit,
+      totalRequestLimit,
       tags,
       activationDays,
       activationUnit,
@@ -1522,6 +1528,8 @@ router.post('/api-keys/batch', authenticateAdmin, async (req, res) => {
           dailyCostLimit,
           totalCostLimit,
           weeklyOpusCostLimit,
+          dailyRequestLimit,
+          totalRequestLimit,
           tags,
           activationDays,
           activationUnit,
@@ -1654,6 +1662,12 @@ router.put('/api-keys/batch', authenticateAdmin, async (req, res) => {
         if (updates.weeklyOpusCostLimit !== undefined) {
           finalUpdates.weeklyOpusCostLimit = updates.weeklyOpusCostLimit
         }
+        if (updates.dailyRequestLimit !== undefined) {
+          finalUpdates.dailyRequestLimit = updates.dailyRequestLimit
+        }
+        if (updates.totalRequestLimit !== undefined) {
+          finalUpdates.totalRequestLimit = updates.totalRequestLimit
+        }
         if (updates.permissions !== undefined) {
           finalUpdates.permissions = updates.permissions
         }
@@ -1785,6 +1799,8 @@ router.put('/api-keys/:keyId', authenticateAdmin, async (req, res) => {
       dailyCostLimit,
       totalCostLimit,
       weeklyOpusCostLimit,
+      dailyRequestLimit, // 新增：每日请求次数限制
+      totalRequestLimit, // 新增：总请求次数限制
       tags,
       ownerId // 新增：所有者ID字段
     } = req.body
@@ -1960,6 +1976,24 @@ router.put('/api-keys/:keyId', authenticateAdmin, async (req, res) => {
           .json({ error: 'Weekly Opus cost limit must be a non-negative number' })
       }
       updates.weeklyOpusCostLimit = costLimit
+    }
+
+    // 处理每日请求次数限制
+    if (dailyRequestLimit !== undefined && dailyRequestLimit !== null && dailyRequestLimit !== '') {
+      const limit = Number(dailyRequestLimit)
+      if (!Number.isInteger(limit) || limit < 0) {
+        return res.status(400).json({ error: 'Daily request limit must be a non-negative integer' })
+      }
+      updates.dailyRequestLimit = limit
+    }
+
+    // 处理总请求次数限制
+    if (totalRequestLimit !== undefined && totalRequestLimit !== null && totalRequestLimit !== '') {
+      const limit = Number(totalRequestLimit)
+      if (!Number.isInteger(limit) || limit < 0) {
+        return res.status(400).json({ error: 'Total request limit must be a non-negative integer' })
+      }
+      updates.totalRequestLimit = limit
     }
 
     // 处理标签

@@ -276,7 +276,9 @@ class RedisClient {
       'rateLimitWindow',
       'rateLimitCost',
       'maxConcurrency',
-      'activationDuration'
+      'activationDuration',
+      'dailyRequestLimit',
+      'totalRequestLimit'
     ]
     for (const field of numFields) {
       if (parsed[field] !== undefined && parsed[field] !== '') {
