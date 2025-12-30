@@ -3,9 +3,12 @@ const router = express.Router()
 const logger = require('../utils/logger')
 const { authenticateApiKey } = require('../middleware/auth')
 const geminiAccountService = require('../services/geminiAccountService')
+const geminiApiAccountService = require('../services/geminiApiAccountService')
 const unifiedGeminiScheduler = require('../services/unifiedGeminiScheduler')
 const { getAvailableModels } = require('../services/geminiRelayService')
 const crypto = require('crypto')
+const axios = require('axios')
+const ProxyHelper = require('../utils/proxyHelper')
 
 // 生成会话哈希
 function generateSessionHash(req) {
@@ -23,6 +26,56 @@ function generateSessionHash(req) {
 function checkPermissions(apiKeyData, requiredPermission = 'gemini') {
   const permissions = apiKeyData.permissions || 'all'
   return permissions === 'all' || permissions === requiredPermission
+}
+
+// 解析账户代理配置
+function parseProxyConfig(account) {
+  let proxyConfig = null
+  if (account.proxy) {
+    try {
+      proxyConfig = typeof account.proxy === 'string' ? JSON.parse(account.proxy) : account.proxy
+    } catch (e) {
+      logger.warn('Failed to parse proxy configuration:', e)
+    }
+  }
+  return proxyConfig
+}
+
+/**
+ * 构建 Gemini API URL
+ * 兼容新旧 baseUrl 格式：
+ * - 新格式（以 /models 结尾）: https://xxx.com/v1beta/models -> 直接拼接 /{model}:action
+ * - 旧格式（不以 /models 结尾）: https://xxx.com -> 拼接 /v1beta/models/{model}:action
+ */
+function buildGeminiApiUrl(baseUrl, model, action, apiKey, options = {}) {
+  const { stream = false, listModels = false } = options
+
+  // 移除末尾的斜杠（如果有）
+  const normalizedBaseUrl = baseUrl.replace(/\/+$/, '')
+
+  // 检查是否为新格式（以 /models 结尾）
+  const isNewFormat = normalizedBaseUrl.endsWith('/models')
+
+  let url
+  if (listModels) {
+    // 获取模型列表
+    if (isNewFormat) {
+      url = `${normalizedBaseUrl}?key=${apiKey}`
+    } else {
+      url = `${normalizedBaseUrl}/v1beta/models?key=${apiKey}`
+    }
+  } else {
+    // 模型操作 (generateContent, streamGenerateContent, countTokens)
+    const streamParam = stream ? '&alt=sse' : ''
+
+    if (isNewFormat) {
+      url = `${normalizedBaseUrl}/${model}:${action}?key=${apiKey}${streamParam}`
+    } else {
+      url = `${normalizedBaseUrl}/v1beta/models/${model}:${action}?key=${apiKey}${streamParam}`
+    }
+  }
+
+  return url
 }
 
 // 转换 OpenAI 消息格式到 Gemini 格式
@@ -177,8 +230,11 @@ function convertGeminiResponseToOpenAI(geminiResponse, model, stream = false) {
   }
 }
 
-// OpenAI 兼容的聊天完成端点
-router.post('/v1/chat/completions', authenticateApiKey, async (req, res) => {
+/**
+ * OpenAI 兼容的聊天完成处理函数
+ * 支持 OAuth 账户和 API Key 账户
+ */
+async function handleOpenAIChatCompletions(req, res) {
   const startTime = Date.now()
   let abortController = null
   let account = null // Declare account outside try block for error handling
@@ -282,14 +338,26 @@ router.post('/v1/chat/completions', authenticateApiKey, async (req, res) => {
     // 生成会话哈希用于粘性会话
     sessionHash = generateSessionHash(req)
 
-    // 选择可用的 Gemini 账户
+    // 选择可用的 Gemini 账户（支持 OAuth 和 API Key 账户）
+    let isApiAccount = false
     try {
       accountSelection = await unifiedGeminiScheduler.selectAccountForApiKey(
         apiKeyData,
         sessionHash,
-        model
+        model,
+        {
+          allowApiAccounts: true
+        }
       )
-      account = await geminiAccountService.getAccount(accountSelection.accountId)
+
+      // 根据账户类型获取账户信息
+      if (accountSelection.accountType === 'gemini-api') {
+        account = await geminiApiAccountService.getAccount(accountSelection.accountId)
+        isApiAccount = true
+      } else {
+        account = await geminiAccountService.getAccount(accountSelection.accountId)
+        isApiAccount = false
+      }
     } catch (error) {
       logger.error('Failed to select Gemini account:', error)
       account = null
@@ -305,20 +373,19 @@ router.post('/v1/chat/completions', authenticateApiKey, async (req, res) => {
       })
     }
 
-    logger.info(`Using Gemini account: ${account.id} for API key: ${apiKeyData.id}`)
+    logger.info(
+      `Using Gemini ${isApiAccount ? 'API' : 'OAuth'} account: ${account.id} for API key: ${apiKeyData.id}`
+    )
 
     // 标记账户被使用
-    await geminiAccountService.markAccountUsed(account.id)
+    if (isApiAccount) {
+      await geminiApiAccountService.markAccountUsed(account.id)
+    } else {
+      await geminiAccountService.markAccountUsed(account.id)
+    }
 
     // 解析账户的代理配置
-    let proxyConfig = null
-    if (account.proxy) {
-      try {
-        proxyConfig = typeof account.proxy === 'string' ? JSON.parse(account.proxy) : account.proxy
-      } catch (e) {
-        logger.warn('Failed to parse proxy configuration:', e)
-      }
-    }
+    const proxyConfig = parseProxyConfig(account)
 
     // 创建中止控制器
     abortController = new AbortController()
@@ -331,30 +398,180 @@ router.post('/v1/chat/completions', authenticateApiKey, async (req, res) => {
       }
     })
 
-    // 获取OAuth客户端
-    const client = await geminiAccountService.getOauthClient(
-      account.accessToken,
-      account.refreshToken,
-      proxyConfig
-    )
-    if (actualStream) {
-      // 流式响应
-      logger.info('StreamGenerateContent request', {
-        model,
-        projectId: account.projectId,
-        apiKeyId: apiKeyData.id
-      })
+    // 根据账户类型执行不同的请求逻辑
+    let streamResponse
 
-      const streamResponse = await geminiAccountService.generateContentStream(
-        client,
-        { model, request: geminiRequestBody },
-        null, // user_prompt_id
-        account.projectId, // 使用有权限的项目ID
-        apiKeyData.id, // 使用 API Key ID 作为 session ID
-        abortController.signal, // 传递中止信号
-        proxyConfig // 传递代理配置
+    if (isApiAccount) {
+      // API Key 账户：直接调用 Google Gemini API
+      const apiUrl = buildGeminiApiUrl(
+        account.baseUrl || 'https://generativelanguage.googleapis.com',
+        model,
+        actualStream ? 'streamGenerateContent' : 'generateContent',
+        account.apiKey,
+        { stream: actualStream }
       )
 
+      const axiosConfig = {
+        method: 'POST',
+        url: apiUrl,
+        data: geminiRequestBody,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': account.apiKey,
+          'x-goog-api-key': account.apiKey
+        },
+        responseType: actualStream ? 'stream' : 'json',
+        signal: abortController.signal
+      }
+
+      // 添加代理配置
+      if (proxyConfig) {
+        axiosConfig.httpsAgent = ProxyHelper.createProxyAgent(proxyConfig)
+        axiosConfig.httpAgent = ProxyHelper.createProxyAgent(proxyConfig)
+      }
+
+      if (actualStream) {
+        // 流式响应
+        logger.info('API Key StreamGenerateContent request', {
+          model,
+          apiKeyId: apiKeyData.id
+        })
+
+        const apiResponse = await axios(axiosConfig)
+        streamResponse = apiResponse.data
+      } else {
+        // 非流式响应
+        logger.info('API Key GenerateContent request', {
+          model,
+          apiKeyId: apiKeyData.id
+        })
+
+        const apiResponse = await axios(axiosConfig)
+        const geminiData = apiResponse.data
+
+        // 转换为 OpenAI 格式并返回
+        const openaiResponse = {
+          id: `chatcmpl-${Date.now()}`,
+          object: 'chat.completion',
+          created: Math.floor(Date.now() / 1000),
+          model,
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: 'assistant',
+                content:
+                  geminiData.candidates?.[0]?.content?.parts?.[0]?.text || 'No response generated'
+              },
+              finish_reason: 'stop'
+            }
+          ],
+          usage: {
+            prompt_tokens: geminiData.usageMetadata?.promptTokenCount || 0,
+            completion_tokens: geminiData.usageMetadata?.candidatesTokenCount || 0,
+            total_tokens: geminiData.usageMetadata?.totalTokenCount || 0
+          }
+        }
+
+        // 记录使用统计
+        if (geminiData.usageMetadata) {
+          try {
+            const apiKeyService = require('../services/apiKeyService')
+            await apiKeyService.recordUsage(
+              apiKeyData.id,
+              geminiData.usageMetadata.promptTokenCount || 0,
+              geminiData.usageMetadata.candidatesTokenCount || 0,
+              0,
+              0,
+              model,
+              account.id
+            )
+            logger.info(
+              `📊 Recorded Gemini API usage - Input: ${geminiData.usageMetadata.promptTokenCount}, Output: ${geminiData.usageMetadata.candidatesTokenCount}`
+            )
+          } catch (error) {
+            logger.error('Failed to record Gemini API usage:', error)
+          }
+        }
+
+        const duration = Date.now() - startTime
+        logger.info(`OpenAI-Gemini API request completed in ${duration}ms`)
+        return res.json(openaiResponse)
+      }
+    } else {
+      // OAuth 账户：使用 geminiAccountService
+      const client = await geminiAccountService.getOauthClient(
+        account.accessToken,
+        account.refreshToken,
+        proxyConfig
+      )
+
+      if (actualStream) {
+        // 流式响应
+        logger.info('OAuth StreamGenerateContent request', {
+          model,
+          projectId: account.projectId,
+          apiKeyId: apiKeyData.id
+        })
+
+        streamResponse = await geminiAccountService.generateContentStream(
+          client,
+          { model, request: geminiRequestBody },
+          null, // user_prompt_id
+          account.projectId, // 使用有权限的项目ID
+          apiKeyData.id, // 使用 API Key ID 作为 session ID
+          abortController.signal, // 传递中止信号
+          proxyConfig // 传递代理配置
+        )
+      } else {
+        // 非流式响应
+        logger.info('OAuth GenerateContent request', {
+          model,
+          projectId: account.projectId,
+          apiKeyId: apiKeyData.id
+        })
+
+        const response = await geminiAccountService.generateContent(
+          client,
+          { model, request: geminiRequestBody },
+          null,
+          account.projectId,
+          apiKeyData.id,
+          proxyConfig
+        )
+
+        // 转换为 OpenAI 格式并返回
+        const openaiResponse = convertGeminiResponseToOpenAI(response, model, false)
+
+        // 记录使用统计
+        if (openaiResponse.usage) {
+          try {
+            const apiKeyService = require('../services/apiKeyService')
+            await apiKeyService.recordUsage(
+              apiKeyData.id,
+              openaiResponse.usage.prompt_tokens || 0,
+              openaiResponse.usage.completion_tokens || 0,
+              0,
+              0,
+              model,
+              account.id
+            )
+            logger.info(
+              `📊 Recorded Gemini OAuth usage - Input: ${openaiResponse.usage.prompt_tokens}, Output: ${openaiResponse.usage.completion_tokens}`
+            )
+          } catch (error) {
+            logger.error('Failed to record Gemini OAuth usage:', error)
+          }
+        }
+
+        const duration = Date.now() - startTime
+        logger.info(`OpenAI-Gemini OAuth request completed in ${duration}ms`)
+        return res.json(openaiResponse)
+      }
+    }
+
+    // 流式响应处理（API Key 和 OAuth 账户共用）
+    if (actualStream && streamResponse) {
       // 设置流式响应头
       res.setHeader('Content-Type', 'text/event-stream')
       res.setHeader('Cache-Control', 'no-cache')
@@ -418,15 +635,20 @@ router.post('/v1/chat/completions', authenticateApiKey, async (req, res) => {
             try {
               const data = JSON.parse(jsonData)
 
+              // 兼容两种格式：
+              // - OAuth 账户: { response: { candidates: [...], usageMetadata: {...} } }
+              // - API Key 账户: { candidates: [...], usageMetadata: {...} }
+              const actualResponse = data.response || data
+
               // 捕获usage数据
-              if (data.response?.usageMetadata) {
-                totalUsage = data.response.usageMetadata
+              if (actualResponse.usageMetadata) {
+                totalUsage = actualResponse.usageMetadata
                 logger.debug('📊 Captured Gemini usage data:', totalUsage)
               }
 
               // 转换为 OpenAI 流式格式
-              if (data.response?.candidates && data.response.candidates.length > 0) {
-                const candidate = data.response.candidates[0]
+              if (actualResponse.candidates && actualResponse.candidates.length > 0) {
+                const candidate = actualResponse.candidates[0]
                 const content = candidate.content?.parts?.[0]?.text || ''
                 const { finishReason } = candidate
 
@@ -451,7 +673,7 @@ router.post('/v1/chat/completions', authenticateApiKey, async (req, res) => {
                   // 如果结束了，添加 usage 信息并发送最终的 [DONE]
                   if (finishReason === 'STOP') {
                     // 如果有 usage 数据，添加到最后一个 chunk
-                    if (data.response.usageMetadata) {
+                    if (actualResponse.usageMetadata) {
                       const usageChunk = {
                         id: `chatcmpl-${Date.now()}`,
                         object: 'chat.completion.chunk',
@@ -465,9 +687,9 @@ router.post('/v1/chat/completions', authenticateApiKey, async (req, res) => {
                           }
                         ],
                         usage: {
-                          prompt_tokens: data.response.usageMetadata.promptTokenCount || 0,
-                          completion_tokens: data.response.usageMetadata.candidatesTokenCount || 0,
-                          total_tokens: data.response.usageMetadata.totalTokenCount || 0
+                          prompt_tokens: actualResponse.usageMetadata.promptTokenCount || 0,
+                          completion_tokens: actualResponse.usageMetadata.candidatesTokenCount || 0,
+                          total_tokens: actualResponse.usageMetadata.totalTokenCount || 0
                         }
                       }
                       res.write(`data: ${JSON.stringify(usageChunk)}\n\n`)
@@ -557,48 +779,6 @@ router.post('/v1/chat/completions', authenticateApiKey, async (req, res) => {
           res.end()
         }
       })
-    } else {
-      // 非流式响应
-      logger.info('GenerateContent request', {
-        model,
-        projectId: account.projectId,
-        apiKeyId: apiKeyData.id
-      })
-
-      const response = await geminiAccountService.generateContent(
-        client,
-        { model, request: geminiRequestBody },
-        null, // user_prompt_id
-        account.projectId, // 使用有权限的项目ID
-        apiKeyData.id, // 使用 API Key ID 作为 session ID
-        proxyConfig // 传递代理配置
-      )
-
-      // 转换为 OpenAI 格式并返回
-      const openaiResponse = convertGeminiResponseToOpenAI(response, model, false)
-
-      // 记录使用统计
-      if (openaiResponse.usage) {
-        try {
-          const apiKeyService = require('../services/apiKeyService')
-          await apiKeyService.recordUsage(
-            apiKeyData.id,
-            openaiResponse.usage.prompt_tokens || 0,
-            openaiResponse.usage.completion_tokens || 0,
-            0, // cacheCreateTokens
-            0, // cacheReadTokens
-            model,
-            account.id
-          )
-          logger.info(
-            `📊 Recorded Gemini usage - Input: ${openaiResponse.usage.prompt_tokens}, Output: ${openaiResponse.usage.completion_tokens}, Total: ${openaiResponse.usage.total_tokens}`
-          )
-        } catch (error) {
-          logger.error('Failed to record Gemini usage:', error)
-        }
-      }
-
-      res.json(openaiResponse)
     }
 
     const duration = Date.now() - startTime
@@ -631,7 +811,10 @@ router.post('/v1/chat/completions', authenticateApiKey, async (req, res) => {
     }
   }
   return undefined
-})
+}
+
+// 注册路由
+router.post('/v1/chat/completions', authenticateApiKey, handleOpenAIChatCompletions)
 
 // OpenAI 兼容的模型列表端点
 router.get('/v1/models', authenticateApiKey, async (req, res) => {
@@ -755,3 +938,4 @@ router.get('/v1/models/:model', authenticateApiKey, async (req, res) => {
 })
 
 module.exports = router
+module.exports.handleOpenAIChatCompletions = handleOpenAIChatCompletions

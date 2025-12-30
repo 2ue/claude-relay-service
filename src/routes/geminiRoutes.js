@@ -35,6 +35,9 @@ const {
   ensureGeminiPermissionMiddleware
 } = require('../handlers/geminiHandlers')
 
+// 从 openaiGeminiRoutes.js 导入 OpenAI 兼容的处理函数
+const { handleOpenAIChatCompletions } = require('./openaiGeminiRoutes')
+
 // ============================================================================
 // OpenAI 兼容格式路由
 // ============================================================================
@@ -48,16 +51,16 @@ router.post('/messages', authenticateApiKey, handleMessages)
 /**
  * POST /chat/completions
  * OpenAI Chat Completions 兼容端点
- * 功能与 /messages 相同，仅路径不同
+ * 支持 OAuth 账户和 API Key 账户，返回 OpenAI 兼容格式
  */
-router.post('/chat/completions', authenticateApiKey, handleMessages)
+router.post('/chat/completions', authenticateApiKey, handleOpenAIChatCompletions)
 
 /**
  * POST /v1/chat/completions
  * OpenAI Chat Completions 兼容端点（带 v1 前缀）
- * 并支持gemini api key的账号
+ * 支持 OAuth 账户和 API Key 账户，返回 OpenAI 兼容格式
  */
-router.post('/v1/chat/completions', authenticateApiKey, handleMessages)
+router.post('/v1/chat/completions', authenticateApiKey, handleOpenAIChatCompletions)
 
 // ============================================================================
 // 模型和信息路由
