@@ -62,6 +62,13 @@ router.post('/chat/completions', authenticateApiKey, handleOpenAIChatCompletions
  */
 router.post('/v1/chat/completions', authenticateApiKey, handleOpenAIChatCompletions)
 
+/**
+ * POST /v1/chat/completions
+ * OpenAI Chat Completions 兼容端点（带 v1 前缀）
+ * 并支持gemini api key的账号
+ */
+router.post('/openai/v1/chat/completions', authenticateApiKey, handleMessages)
+
 // ============================================================================
 // 模型和信息路由
 // ============================================================================
