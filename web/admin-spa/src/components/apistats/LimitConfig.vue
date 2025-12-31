@@ -103,67 +103,148 @@
 
       <!-- 仅在单 Key 模式下显示限制配置 -->
       <div v-if="!multiKeyMode" class="space-y-4 md:space-y-5">
-        <!-- 每日费用限制 -->
-        <div>
-          <div class="mb-2 flex items-center justify-between">
-            <span class="text-sm font-medium text-gray-600 dark:text-gray-400 md:text-base"
-              >每日费用限制</span
-            >
-            <span class="text-xs text-gray-500 dark:text-gray-400 md:text-sm">
-              <span v-if="statsData.limits.dailyCostLimit > 0">
-                ${{ statsData.limits.currentDailyCost.toFixed(4) }} / ${{
-                  statsData.limits.dailyCostLimit.toFixed(2)
-                }}
-              </span>
-              <span v-else class="flex items-center gap-1">
-                ${{ statsData.limits.currentDailyCost.toFixed(4) }} / <i class="fas fa-infinity" />
-              </span>
-            </span>
-          </div>
-          <div
-            v-if="statsData.limits.dailyCostLimit > 0"
-            class="h-2 w-full rounded-full bg-gray-200 dark:bg-gray-700"
-          >
+        <!-- 费用限制和次数限制左右布局 -->
+        <div class="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6">
+          <!-- 左侧：费用限制 -->
+          <div class="space-y-4">
             <div
-              class="h-2 rounded-full transition-all duration-300"
-              :class="getDailyCostProgressColor()"
-              :style="{ width: getDailyCostProgress() + '%' }"
-            />
-          </div>
-          <div v-else class="h-2 w-full rounded-full bg-gray-200">
-            <div class="h-2 rounded-full bg-green-500" style="width: 0%" />
-          </div>
-        </div>
+              class="mb-2 flex items-center text-sm font-semibold text-gray-700 dark:text-gray-300"
+            >
+              <i class="fas fa-dollar-sign mr-2 text-green-500" />
+              费用限制
+            </div>
 
-        <!-- 总费用限制 -->
-        <div>
-          <div class="mb-2 flex items-center justify-between">
-            <span class="text-sm font-medium text-gray-600 dark:text-gray-400 md:text-base"
-              >总费用限制</span
-            >
-            <span class="text-xs text-gray-500 dark:text-gray-400 md:text-sm">
-              <span v-if="statsData.limits.totalCostLimit > 0">
-                ${{ statsData.limits.currentTotalCost.toFixed(4) }} / ${{
-                  statsData.limits.totalCostLimit.toFixed(2)
-                }}
-              </span>
-              <span v-else class="flex items-center gap-1">
-                ${{ statsData.limits.currentTotalCost.toFixed(4) }} / <i class="fas fa-infinity" />
-              </span>
-            </span>
+            <!-- 每日费用限制 -->
+            <div>
+              <div class="mb-2 flex items-center justify-between">
+                <span class="text-sm font-medium text-gray-600 dark:text-gray-400">每日费用</span>
+                <span class="text-xs text-gray-500 dark:text-gray-400">
+                  <span v-if="statsData.limits.dailyCostLimit > 0">
+                    ${{ statsData.limits.currentDailyCost.toFixed(4) }} / ${{
+                      statsData.limits.dailyCostLimit.toFixed(2)
+                    }}
+                  </span>
+                  <span v-else class="flex items-center gap-1">
+                    ${{ statsData.limits.currentDailyCost.toFixed(4) }} /
+                    <i class="fas fa-infinity" />
+                  </span>
+                </span>
+              </div>
+              <div
+                v-if="statsData.limits.dailyCostLimit > 0"
+                class="h-2 w-full rounded-full bg-gray-200 dark:bg-gray-700"
+              >
+                <div
+                  class="h-2 rounded-full transition-all duration-300"
+                  :class="getDailyCostProgressColor()"
+                  :style="{ width: getDailyCostProgress() + '%' }"
+                />
+              </div>
+              <div v-else class="h-2 w-full rounded-full bg-gray-200 dark:bg-gray-700">
+                <div class="h-2 rounded-full bg-green-500" style="width: 0%" />
+              </div>
+            </div>
+
+            <!-- 总费用限制 -->
+            <div>
+              <div class="mb-2 flex items-center justify-between">
+                <span class="text-sm font-medium text-gray-600 dark:text-gray-400">总费用</span>
+                <span class="text-xs text-gray-500 dark:text-gray-400">
+                  <span v-if="statsData.limits.totalCostLimit > 0">
+                    ${{ statsData.limits.currentTotalCost.toFixed(4) }} / ${{
+                      statsData.limits.totalCostLimit.toFixed(2)
+                    }}
+                  </span>
+                  <span v-else class="flex items-center gap-1">
+                    ${{ statsData.limits.currentTotalCost.toFixed(4) }} /
+                    <i class="fas fa-infinity" />
+                  </span>
+                </span>
+              </div>
+              <div
+                v-if="statsData.limits.totalCostLimit > 0"
+                class="h-2 w-full rounded-full bg-gray-200 dark:bg-gray-700"
+              >
+                <div
+                  class="h-2 rounded-full transition-all duration-300"
+                  :class="getTotalCostProgressColor()"
+                  :style="{ width: getTotalCostProgress() + '%' }"
+                />
+              </div>
+              <div v-else class="h-2 w-full rounded-full bg-gray-200 dark:bg-gray-700">
+                <div class="h-2 rounded-full bg-blue-500" style="width: 0%" />
+              </div>
+            </div>
           </div>
-          <div
-            v-if="statsData.limits.totalCostLimit > 0"
-            class="h-2 w-full rounded-full bg-gray-200 dark:bg-gray-700"
-          >
+
+          <!-- 右侧：次数限制 -->
+          <div class="space-y-4">
             <div
-              class="h-2 rounded-full transition-all duration-300"
-              :class="getTotalCostProgressColor()"
-              :style="{ width: getTotalCostProgress() + '%' }"
-            />
-          </div>
-          <div v-else class="h-2 w-full rounded-full bg-gray-200">
-            <div class="h-2 rounded-full bg-blue-500" style="width: 0%" />
+              class="mb-2 flex items-center text-sm font-semibold text-gray-700 dark:text-gray-300"
+            >
+              <i class="fas fa-hashtag mr-2 text-cyan-500" />
+              次数限制
+            </div>
+
+            <!-- 每日请求次数限制 -->
+            <div>
+              <div class="mb-2 flex items-center justify-between">
+                <span class="text-sm font-medium text-gray-600 dark:text-gray-400">每日请求</span>
+                <span class="text-xs text-gray-500 dark:text-gray-400">
+                  <span v-if="statsData.limits.dailyRequestLimit > 0">
+                    {{ formatNumber(statsData.limits.dailyRequests || 0) }} /
+                    {{ formatNumber(statsData.limits.dailyRequestLimit) }}
+                  </span>
+                  <span v-else class="flex items-center gap-1">
+                    {{ formatNumber(statsData.limits.dailyRequests || 0) }} /
+                    <i class="fas fa-infinity" />
+                  </span>
+                </span>
+              </div>
+              <div
+                v-if="statsData.limits.dailyRequestLimit > 0"
+                class="h-2 w-full rounded-full bg-gray-200 dark:bg-gray-700"
+              >
+                <div
+                  class="h-2 rounded-full transition-all duration-300"
+                  :class="getDailyRequestProgressColor()"
+                  :style="{ width: getDailyRequestProgress() + '%' }"
+                />
+              </div>
+              <div v-else class="h-2 w-full rounded-full bg-gray-200 dark:bg-gray-700">
+                <div class="h-2 rounded-full bg-cyan-500" style="width: 0%" />
+              </div>
+            </div>
+
+            <!-- 总请求次数限制 -->
+            <div>
+              <div class="mb-2 flex items-center justify-between">
+                <span class="text-sm font-medium text-gray-600 dark:text-gray-400">总请求</span>
+                <span class="text-xs text-gray-500 dark:text-gray-400">
+                  <span v-if="statsData.limits.totalRequestLimit > 0">
+                    {{ formatNumber(statsData.limits.totalRequests || 0) }} /
+                    {{ formatNumber(statsData.limits.totalRequestLimit) }}
+                  </span>
+                  <span v-else class="flex items-center gap-1">
+                    {{ formatNumber(statsData.limits.totalRequests || 0) }} /
+                    <i class="fas fa-infinity" />
+                  </span>
+                </span>
+              </div>
+              <div
+                v-if="statsData.limits.totalRequestLimit > 0"
+                class="h-2 w-full rounded-full bg-gray-200 dark:bg-gray-700"
+              >
+                <div
+                  class="h-2 rounded-full transition-all duration-300"
+                  :class="getTotalRequestProgressColor()"
+                  :style="{ width: getTotalRequestProgress() + '%' }"
+                />
+              </div>
+              <div v-else class="h-2 w-full rounded-full bg-gray-200 dark:bg-gray-700">
+                <div class="h-2 rounded-full bg-teal-500" style="width: 0%" />
+              </div>
+            </div>
           </div>
         </div>
 
@@ -401,6 +482,40 @@ const getOpusWeeklyCostProgressColor = () => {
   if (progress >= 100) return 'bg-red-500'
   if (progress >= 80) return 'bg-yellow-500'
   return 'bg-indigo-500' // 使用紫色表示Opus模型
+}
+
+// 获取每日请求次数进度
+const getDailyRequestProgress = () => {
+  if (!statsData.value.limits.dailyRequestLimit || statsData.value.limits.dailyRequestLimit === 0)
+    return 0
+  const percentage =
+    ((statsData.value.limits.dailyRequests || 0) / statsData.value.limits.dailyRequestLimit) * 100
+  return Math.min(percentage, 100)
+}
+
+// 获取每日请求次数进度条颜色
+const getDailyRequestProgressColor = () => {
+  const progress = getDailyRequestProgress()
+  if (progress >= 100) return 'bg-red-500'
+  if (progress >= 80) return 'bg-yellow-500'
+  return 'bg-cyan-500' // 使用青色表示请求次数
+}
+
+// 获取总请求次数进度
+const getTotalRequestProgress = () => {
+  if (!statsData.value.limits.totalRequestLimit || statsData.value.limits.totalRequestLimit === 0)
+    return 0
+  const percentage =
+    ((statsData.value.limits.totalRequests || 0) / statsData.value.limits.totalRequestLimit) * 100
+  return Math.min(percentage, 100)
+}
+
+// 获取总请求次数进度条颜色
+const getTotalRequestProgressColor = () => {
+  const progress = getTotalRequestProgress()
+  if (progress >= 100) return 'bg-red-500'
+  if (progress >= 80) return 'bg-yellow-500'
+  return 'bg-teal-500' // 使用青绿色表示总请求次数
 }
 
 // 格式化数字
