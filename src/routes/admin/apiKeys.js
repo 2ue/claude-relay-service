@@ -1805,6 +1805,14 @@ router.put('/api-keys/:keyId', authenticateAdmin, async (req, res) => {
       ownerId // 新增：所有者ID字段
     } = req.body
 
+    // 调试日志：检查请求次数限制字段
+    logger.info(`🔍 PUT /api-keys/${keyId} - Request limit fields:`, {
+      dailyRequestLimit,
+      dailyRequestLimitType: typeof dailyRequestLimit,
+      totalRequestLimit,
+      totalRequestLimitType: typeof totalRequestLimit
+    })
+
     // 只允许更新指定字段
     const updates = {}
 
@@ -1985,6 +1993,7 @@ router.put('/api-keys/:keyId', authenticateAdmin, async (req, res) => {
         return res.status(400).json({ error: 'Daily request limit must be a non-negative integer' })
       }
       updates.dailyRequestLimit = limit
+      logger.info(`✅ dailyRequestLimit will be updated to: ${limit}`)
     }
 
     // 处理总请求次数限制
@@ -1994,7 +2003,11 @@ router.put('/api-keys/:keyId', authenticateAdmin, async (req, res) => {
         return res.status(400).json({ error: 'Total request limit must be a non-negative integer' })
       }
       updates.totalRequestLimit = limit
+      logger.info(`✅ totalRequestLimit will be updated to: ${limit}`)
     }
+
+    // 调试日志：检查最终的 updates 对象
+    logger.info(`🔍 Final updates object contains dailyRequestLimit: ${updates.dailyRequestLimit}, totalRequestLimit: ${updates.totalRequestLimit}`)
 
     // 处理标签
     if (tags !== undefined) {
