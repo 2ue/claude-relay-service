@@ -69,6 +69,10 @@ router.post('/v1/chat/completions', authenticateApiKey, handleOpenAIChatCompleti
  */
 router.post('/openai/v1/chat/completions', authenticateApiKey, handleMessages)
 
+router.get('/v1/models', authenticateApiKey, handleModels)
+router.get('/openai/v1/models', authenticateApiKey, handleModels)
+router.get('/openai/models', authenticateApiKey, handleModels)
+
 // ============================================================================
 // 模型和信息路由
 // ============================================================================
