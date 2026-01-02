@@ -491,7 +491,7 @@
                             <button
                               class="flex-shrink-0 rounded p-1 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-600 dark:hover:text-gray-300"
                               title="复制 API Key"
-                              @click.stop="copyApiKey(key.rawKey)"
+                              @click.stop="openCopyDialog(key)"
                             >
                               <i class="fas fa-copy text-xs" />
                             </button>
@@ -2150,6 +2150,84 @@
     </div>
 
     <!-- 模态框组件 -->
+    <!-- 复制密钥弹窗 -->
+    <Teleport to="body">
+      <div
+        v-if="showCopyDialog"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-8 backdrop-blur-sm"
+        @click.self="closeCopyDialog"
+      >
+        <div
+          class="w-full max-w-2xl overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl transition-all dark:border-gray-700 dark:bg-gray-900"
+        >
+          <div
+            class="flex items-start justify-between border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50 px-6 py-4 dark:border-gray-700 dark:from-gray-800 dark:to-gray-800/60"
+          >
+            <div>
+              <p class="text-lg font-bold text-gray-900 dark:text-gray-100">复制 API Key</p>
+              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                支持仅复制密钥，或复制包含密钥的完整使用说明。
+              </p>
+            </div>
+            <button
+              class="text-gray-400 transition-colors hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
+              title="关闭"
+              @click="closeCopyDialog"
+            >
+              <i class="fas fa-times text-lg" />
+            </button>
+          </div>
+
+          <div class="space-y-4 px-6 py-5">
+            <div
+              class="rounded-xl border border-gray-200 bg-gray-50/80 p-4 dark:border-gray-700 dark:bg-gray-800/80"
+            >
+              <div class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400">
+                当前密钥
+              </div>
+              <div class="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div
+                  class="flex-1 break-all rounded-lg bg-white px-3 py-2 font-mono text-sm text-gray-900 shadow-inner ring-1 ring-gray-200 dark:bg-gray-900 dark:text-gray-100 dark:ring-gray-700"
+                >
+                  {{ copyDialogKeyValue }}
+                </div>
+                <button
+                  class="btn btn-primary mt-1 w-full items-center justify-center gap-2 sm:mt-0 sm:w-auto"
+                  @click="copyKeyOnly"
+                >
+                  <i class="fas fa-key" />
+                  仅复制密钥
+                </button>
+              </div>
+            </div>
+
+            <div class="rounded-xl border border-blue-100/70 p-4 dark:border-blue-800/60">
+              <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p class="font-semibold text-gray-900 dark:text-gray-100">复制完整文案</p>
+                  <p class="text-sm text-gray-500 dark:text-gray-400">
+                    已自动替换密钥，适合直接发送给用户。
+                  </p>
+                </div>
+                <button
+                  class="flex w-full items-center justify-center gap-2 rounded-lg border border-blue-200 bg-white px-4 py-2 text-sm font-semibold text-blue-700 shadow-sm transition hover:border-blue-300 hover:bg-blue-50 dark:border-blue-700 dark:bg-gray-900 dark:text-blue-200 dark:hover:bg-blue-800/40 sm:w-auto"
+                  @click="copyKeyWithGuide"
+                >
+                  <i class="fas fa-clipboard" />
+                  复制文案
+                </button>
+              </div>
+              <div
+                class="custom-scrollbar mt-3 max-h-64 overflow-y-auto rounded-lg border border-gray-200 bg-white p-3 text-sm leading-relaxed text-gray-800 shadow-inner dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+              >
+                <pre class="whitespace-pre-wrap font-sans text-sm">{{ copyGuideText }}</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
     <CreateApiKeyModal
       v-if="showCreateApiKeyModal"
       :accounts="accounts"
@@ -2332,6 +2410,8 @@ const editingExpiryKey = ref(null)
 const expiryEditModalRef = ref(null)
 const showUsageDetailModal = ref(false)
 const selectedApiKeyForDetail = ref(null)
+const showCopyDialog = ref(false)
+const copyDialogKey = ref(null)
 
 // 标签相关
 const selectedTagFilter = ref('')
@@ -2369,6 +2449,24 @@ const selectedTagCount = computed(() => {
   if (!selectedTagFilter.value) return 0
   return apiKeys.value.filter((key) => key.tags && key.tags.includes(selectedTagFilter.value))
     .length
+})
+
+const currentOrigin = computed(() => {
+  if (typeof window === 'undefined') return ''
+  const origin = window.location.origin || ''
+  return origin.replace(/\/$/, '')
+})
+
+const copyDialogKeyValue = computed(() => copyDialogKey.value?.rawKey || '')
+
+const copyGuideText = computed(() => {
+  const key = copyDialogKeyValue.value || ''
+  const origin = currentOrigin.value || ''
+  const base = origin.replace(/\/$/, '')
+  const geminiV1 = `${base}/gemini/v1`
+  const gemini = `${base}/gemini`
+  if (!key) return ''
+  return `感谢购买！\n\n1. 密钥：${key}\n2. 模型：gemini-3-pro-preview 或 gemini-2.5-pro\n3. 额度查询：${base}/ 使用密钥输入查询即可每日使用次数以及月卡到期时间\n\n使用方法：https://ycn0fzzbzq3b.feishu.cn/wiki/T1hEweoPZiyMqkkhgwicsEo9nMe 一定要看，看完不懂的再联系客服。\n\n\n【常用软件配置】\n▸ 酒馆：设置→AI连接→API类型选OpenAI，填入自定义端点（基础 URL）：${geminiV1} 和密钥\n▸ Cherry：设置→模型服务商，可以添加OpenAI兼容或者GEMINI提供商\n    →添加->选择Gemini，填入信息  ${gemini}和秘钥\n    →添加->选择OpenAI兼容，填入信息  ${geminiV1}和秘钥\n▸ Gemini CLI：https://ycn0fzzbzq3b.feishu.cn/wiki/T1hEweoPZiyMqkkhgwicsEo9nMe 查看详细使用教程\n▸ Roo code：设置→添加模型服务商，可以添加OpenAI兼容或者GEMINI提供商\n    →添加->gemini，勾选baseurl，填入信息  ${gemini}和秘钥\n    →添加->选择OpenAI兼容，勾选baseurl，填入信息  ${geminiV1}和秘钥\n▸ Kilo code：同Roo code\n\n理论上只要支持openai兼容格式和gemini格式的都可以使用！！！\n\n遇到问题先检查：\n① 地址末尾有没有多余的斜杠\n② 密钥有没有复制完整\n③ 模型名称是否正确`
 })
 
 // 分页相关
@@ -4407,15 +4505,41 @@ const formatLastUsed = (dateString) => {
   return date.toLocaleDateString('zh-CN')
 }
 
-// 复制 API Key 到剪贴板
-const copyApiKey = async (apiKey) => {
+// 复制文本到剪贴板
+const copyApiKey = async (text, successMessage = 'API Key 已复制到剪贴板') => {
+  if (!text) {
+    showToast('没有可复制的内容', 'warning')
+    return
+  }
   try {
-    await navigator.clipboard.writeText(apiKey)
-    showToast('API Key 已复制到剪贴板', 'success')
+    await navigator.clipboard.writeText(text)
+    showToast(successMessage, 'success')
   } catch (err) {
     console.error('复制失败:', err)
     showToast('复制失败，请手动复制', 'error')
   }
+}
+
+const openCopyDialog = (key) => {
+  if (!key?.rawKey) {
+    showToast('当前 Key 无法复制', 'error')
+    return
+  }
+  copyDialogKey.value = key
+  showCopyDialog.value = true
+}
+
+const closeCopyDialog = () => {
+  showCopyDialog.value = false
+  copyDialogKey.value = null
+}
+
+const copyKeyOnly = async () => {
+  await copyApiKey(copyDialogKeyValue.value)
+}
+
+const copyKeyWithGuide = async () => {
+  await copyApiKey(copyGuideText.value, '文案已复制（含密钥）')
 }
 
 const ACCOUNT_TYPE_LABELS = {
