@@ -817,7 +817,7 @@ async function handleOpenAIChatCompletions(req, res) {
 router.post('/v1/chat/completions', authenticateApiKey, handleOpenAIChatCompletions)
 
 // OpenAI 兼容的模型列表端点
-router.get('/v1/models', authenticateApiKey, async (req, res) => {
+const handleModelsEndpoint = async (req, res) => {
   try {
     const apiKeyData = req.apiKey
 
@@ -882,7 +882,11 @@ router.get('/v1/models', authenticateApiKey, async (req, res) => {
     })
   }
   return undefined
-})
+}
+
+// 注册模型列表路由（支持带和不带 v1 前缀）
+router.get('/v1/models', authenticateApiKey, handleModelsEndpoint)
+router.get('/models', authenticateApiKey, handleModelsEndpoint)
 
 // OpenAI 兼容的模型详情端点
 router.get('/v1/models/:model', authenticateApiKey, async (req, res) => {
