@@ -316,6 +316,14 @@ router.get('/api-keys', authenticateAdmin, async (req, res) => {
         apiKey.dailyRequests = (await redis.getDailyRequests(apiKey.id)) || 0
         apiKey.totalRequests = (await redis.getTotalRequests(apiKey.id)) || 0
       }
+
+      // 解密原始 API Key 用于列表展示和复制
+      if (apiKey.encryptedRawKey) {
+        apiKey.rawKey = apiKeyService._decryptRawApiKey(apiKey.encryptedRawKey)
+      } else {
+        apiKey.rawKey = null // 历史数据没有存储原始 key
+      }
+      delete apiKey.encryptedRawKey // 不返回加密数据结构
     }
 
     // 返回分页数据
