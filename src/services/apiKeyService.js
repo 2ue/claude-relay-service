@@ -73,6 +73,71 @@ function sanitizeAccountIdForType(accountId, accountType) {
 class ApiKeyService {
   constructor() {
     this.prefix = config.security.apiKeyPrefix
+
+    // 🔐 加密相关常量（用于加密存储原始 API Key）
+    this.ENCRYPTION_ALGORITHM = 'aes-256-cbc'
+    this.ENCRYPTION_SALT = 'api-key-raw-salt'
+    this._encryptionKeyCache = null
+  }
+
+  // 🔑 生成加密密钥（缓存以提高性能）
+  _generateEncryptionKey() {
+    if (!this._encryptionKeyCache) {
+      this._encryptionKeyCache = crypto.scryptSync(
+        config.security.encryptionKey,
+        this.ENCRYPTION_SALT,
+        32
+      )
+      logger.info('🔑 API Key encryption key derived and cached')
+    }
+    return this._encryptionKeyCache
+  }
+
+  // 🔒 加密原始 API Key
+  _encryptRawApiKey(apiKey) {
+    try {
+      const key = this._generateEncryptionKey()
+      const iv = crypto.randomBytes(16)
+      const cipher = crypto.createCipheriv(this.ENCRYPTION_ALGORITHM, key, iv)
+
+      let encrypted = cipher.update(apiKey, 'utf8', 'hex')
+      encrypted += cipher.final('hex')
+
+      return JSON.stringify({
+        encrypted,
+        iv: iv.toString('hex')
+      })
+    } catch (error) {
+      logger.error('❌ Failed to encrypt raw API key:', error)
+      return null
+    }
+  }
+
+  // 🔓 解密原始 API Key
+  _decryptRawApiKey(encryptedData) {
+    try {
+      if (!encryptedData) {
+        return null
+      }
+
+      const data = typeof encryptedData === 'string' ? JSON.parse(encryptedData) : encryptedData
+
+      if (!data.encrypted || !data.iv) {
+        return null
+      }
+
+      const key = this._generateEncryptionKey()
+      const iv = Buffer.from(data.iv, 'hex')
+      const decipher = crypto.createDecipheriv(this.ENCRYPTION_ALGORITHM, key, iv)
+
+      let decrypted = decipher.update(data.encrypted, 'hex', 'utf8')
+      decrypted += decipher.final('utf8')
+
+      return decrypted
+    } catch (error) {
+      logger.error('❌ Failed to decrypt raw API key:', error)
+      return null
+    }
   }
 
   // 🔑 生成新的API Key
@@ -115,12 +180,14 @@ class ApiKeyService {
     const apiKey = `${this.prefix}${this._generateSecretKey()}`
     const keyId = uuidv4()
     const hashedKey = this._hashApiKey(apiKey)
+    const encryptedRawKey = this._encryptRawApiKey(apiKey) // 加密存储原始 key，用于列表展示
 
     const keyData = {
       id: keyId,
       name,
       description,
       apiKey: hashedKey,
+      encryptedRawKey: encryptedRawKey || '', // 加密的原始 key
       tokenLimit: String(tokenLimit ?? 0),
       concurrencyLimit: String(concurrencyLimit ?? 0),
       rateLimitWindow: String(rateLimitWindow ?? 0),
@@ -666,7 +733,15 @@ class ApiKeyService {
           key.lastUsage = null
         }
 
+        // 解密原始 key 用于列表展示和复制
+        if (key.encryptedRawKey) {
+          key.rawKey = this._decryptRawApiKey(key.encryptedRawKey)
+        } else {
+          key.rawKey = null // 历史数据没有存储原始 key
+        }
+
         delete key.apiKey // 不返回哈希后的key
+        delete key.encryptedRawKey // 不返回加密数据结构
       }
 
       return apiKeys

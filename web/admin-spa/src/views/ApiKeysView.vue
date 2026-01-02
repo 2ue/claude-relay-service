@@ -312,6 +312,11 @@
                       <i v-else class="fas fa-sort ml-1 text-gray-400" />
                     </th>
                     <th
+                      class="min-w-[180px] px-3 py-4 text-left text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300"
+                    >
+                      API Key
+                    </th>
+                    <th
                       class="min-w-[140px] px-3 py-4 text-left text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300"
                     >
                       所属账号
@@ -471,6 +476,35 @@
                             <i class="fas fa-user mr-1" />
                             {{ key.ownerDisplayName }}
                           </div>
+                        </div>
+                      </td>
+                      <!-- API Key 列 -->
+                      <td class="px-3 py-3">
+                        <div class="flex items-center gap-2">
+                          <template v-if="key.rawKey">
+                            <code
+                              class="max-w-[140px] truncate rounded bg-gray-100 px-2 py-1 font-mono text-xs text-gray-700 dark:bg-gray-700 dark:text-gray-300"
+                              :title="key.rawKey"
+                            >
+                              {{ key.rawKey }}
+                            </code>
+                            <button
+                              class="flex-shrink-0 rounded p-1 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-600 dark:hover:text-gray-300"
+                              title="复制 API Key"
+                              @click.stop="copyApiKey(key.rawKey)"
+                            >
+                              <i class="fas fa-copy text-xs" />
+                            </button>
+                          </template>
+                          <template v-else>
+                            <span
+                              class="text-xs text-gray-400 dark:text-gray-500"
+                              title="历史数据，无法复制原始Key"
+                            >
+                              <i class="fas fa-lock mr-1" />
+                              不可复制
+                            </span>
+                          </template>
                         </div>
                       </td>
                       <!-- 所属账号列 -->
@@ -4371,6 +4405,17 @@ const formatLastUsed = (dateString) => {
   if (diff < 86400000) return `${Math.floor(diff / 3600000)} 小时前`
   if (diff < 604800000) return `${Math.floor(diff / 86400000)} 天前`
   return date.toLocaleDateString('zh-CN')
+}
+
+// 复制 API Key 到剪贴板
+const copyApiKey = async (apiKey) => {
+  try {
+    await navigator.clipboard.writeText(apiKey)
+    showToast('API Key 已复制到剪贴板', 'success')
+  } catch (err) {
+    console.error('复制失败:', err)
+    showToast('复制失败，请手动复制', 'error')
+  }
 }
 
 const ACCOUNT_TYPE_LABELS = {
