@@ -8,6 +8,43 @@ const config = require('../../../config/config')
 
 const router = express.Router()
 
+// 有效的权限值列表
+const VALID_PERMISSIONS = ['claude', 'gemini', 'openai', 'droid']
+
+/**
+ * 验证权限数组格式
+ * @param {any} permissions - 权限值（可以是数组或其他）
+ * @returns {string|null} - 返回错误消息，null 表示验证通过
+ */
+function validatePermissions(permissions) {
+  // 空值或未定义表示全部服务
+  if (permissions === undefined || permissions === null || permissions === '') {
+    return null
+  }
+  // 兼容旧格式字符串
+  if (typeof permissions === 'string') {
+    if (permissions === 'all' || VALID_PERMISSIONS.includes(permissions)) {
+      return null
+    }
+    return `Invalid permissions value. Must be an array of: ${VALID_PERMISSIONS.join(', ')}`
+  }
+  // 新格式数组
+  if (Array.isArray(permissions)) {
+    // 空数组表示全部服务
+    if (permissions.length === 0) {
+      return null
+    }
+    // 验证数组中的每个值
+    for (const perm of permissions) {
+      if (!VALID_PERMISSIONS.includes(perm)) {
+        return `Invalid permission value "${perm}". Valid values are: ${VALID_PERMISSIONS.join(', ')}`
+      }
+    }
+    return null
+  }
+  return `Permissions must be an array. Valid values are: ${VALID_PERMISSIONS.join(', ')}`
+}
+
 // 👥 用户管理 (用于API Key分配)
 
 // 获取所有用户列表（用于API Key分配）
@@ -1398,16 +1435,10 @@ router.post('/api-keys', authenticateAdmin, async (req, res) => {
       }
     }
 
-    // 验证服务权限字段
-    if (
-      permissions !== undefined &&
-      permissions !== null &&
-      permissions !== '' &&
-      !['claude', 'gemini', 'openai', 'droid', 'all'].includes(permissions)
-    ) {
-      return res.status(400).json({
-        error: 'Invalid permissions value. Must be claude, gemini, openai, droid, or all'
-      })
+    // 验证服务权限字段（支持数组格式）
+    const permissionsError = validatePermissions(permissions)
+    if (permissionsError) {
+      return res.status(400).json({ error: permissionsError })
     }
 
     const newKey = await apiKeyService.generateApiKey({
@@ -1501,15 +1532,10 @@ router.post('/api-keys/batch', authenticateAdmin, async (req, res) => {
         .json({ error: 'Base name must be less than 90 characters to allow for numbering' })
     }
 
-    if (
-      permissions !== undefined &&
-      permissions !== null &&
-      permissions !== '' &&
-      !['claude', 'gemini', 'openai', 'droid', 'all'].includes(permissions)
-    ) {
-      return res.status(400).json({
-        error: 'Invalid permissions value. Must be claude, gemini, openai, droid, or all'
-      })
+    // 验证服务权限字段（支持数组格式）
+    const batchPermissionsError = validatePermissions(permissions)
+    if (batchPermissionsError) {
+      return res.status(400).json({ error: batchPermissionsError })
     }
 
     // 生成批量API Keys
@@ -1614,13 +1640,12 @@ router.put('/api-keys/batch', authenticateAdmin, async (req, res) => {
       })
     }
 
-    if (
-      updates.permissions !== undefined &&
-      !['claude', 'gemini', 'openai', 'droid', 'all'].includes(updates.permissions)
-    ) {
-      return res.status(400).json({
-        error: 'Invalid permissions value. Must be claude, gemini, openai, droid, or all'
-      })
+    // 验证服务权限字段（支持数组格式）
+    if (updates.permissions !== undefined) {
+      const updatePermissionsError = validatePermissions(updates.permissions)
+      if (updatePermissionsError) {
+        return res.status(400).json({ error: updatePermissionsError })
+      }
     }
 
     logger.info(
@@ -1903,11 +1928,10 @@ router.put('/api-keys/:keyId', authenticateAdmin, async (req, res) => {
     }
 
     if (permissions !== undefined) {
-      // 验证权限值
-      if (!['claude', 'gemini', 'openai', 'droid', 'all'].includes(permissions)) {
-        return res.status(400).json({
-          error: 'Invalid permissions value. Must be claude, gemini, openai, droid, or all'
-        })
+      // 验证服务权限字段（支持数组格式）
+      const singlePermissionsError = validatePermissions(permissions)
+      if (singlePermissionsError) {
+        return res.status(400).json({ error: singlePermissionsError })
       }
       updates.permissions = permissions
     }

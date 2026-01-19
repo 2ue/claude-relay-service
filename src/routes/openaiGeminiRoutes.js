@@ -9,6 +9,7 @@ const { getAvailableModels } = require('../services/geminiRelayService')
 const crypto = require('crypto')
 const axios = require('axios')
 const ProxyHelper = require('../utils/proxyHelper')
+const apiKeyService = require('../services/apiKeyService')
 
 // 生成会话哈希
 function generateSessionHash(req) {
@@ -22,10 +23,19 @@ function generateSessionHash(req) {
   return crypto.createHash('sha256').update(sessionData).digest('hex')
 }
 
+function ensureAntigravityProjectId(account) {
+  if (account.projectId) {
+    return account.projectId
+  }
+  if (account.tempProjectId) {
+    return account.tempProjectId
+  }
+  return `ag-${crypto.randomBytes(8).toString('hex')}`
+}
+
 // 检查 API Key 权限
 function checkPermissions(apiKeyData, requiredPermission = 'gemini') {
-  const permissions = apiKeyData.permissions || 'all'
-  return permissions === 'all' || permissions === requiredPermission
+  return apiKeyService.hasPermission(apiKeyData?.permissions, requiredPermission)
 }
 
 // 解析账户代理配置
@@ -721,7 +731,6 @@ async function handleOpenAIChatCompletions(req, res) {
         // 记录使用统计
         if (!usageReported && totalUsage.totalTokenCount > 0) {
           try {
-            const apiKeyService = require('../services/apiKeyService')
             await apiKeyService.recordUsage(
               apiKeyData.id,
               totalUsage.promptTokenCount || 0,
@@ -784,7 +793,15 @@ async function handleOpenAIChatCompletions(req, res) {
     const duration = Date.now() - startTime
     logger.info(`OpenAI-Gemini request completed in ${duration}ms`)
   } catch (error) {
-    logger.error('OpenAI-Gemini request error:', error)
+    const statusForLog = error?.status || error?.response?.status
+    logger.error('OpenAI-Gemini request error', {
+      message: error?.message,
+      status: statusForLog,
+      code: error?.code,
+      requestUrl: error?.config?.url,
+      requestMethod: error?.config?.method,
+      upstreamTraceId: error?.response?.headers?.['x-cloudaicompanion-trace-id']
+    })
 
     // 处理速率限制
     if (error.status === 429) {
@@ -793,17 +810,24 @@ async function handleOpenAIChatCompletions(req, res) {
       }
     }
 
-    // 返回 OpenAI 格式的错误响应
-    const status = error.status || 500
-    const errorResponse = {
-      error: error.error || {
-        message: error.message || 'Internal server error',
-        type: 'server_error',
-        code: 'internal_error'
+    // 检查响应是否已发送（流式响应场景），避免 ERR_HTTP_HEADERS_SENT
+    if (!res.headersSent) {
+      // 客户端断开使用 499 状态码 (Client Closed Request)
+      if (error.message === 'Client disconnected') {
+        res.status(499).end()
+      } else {
+        // 返回 OpenAI 格式的错误响应
+        const status = error.status || 500
+        const errorResponse = {
+          error: error.error || {
+            message: error.message || 'Internal server error',
+            type: 'server_error',
+            code: 'internal_error'
+          }
+        }
+        res.status(status).json(errorResponse)
       }
     }
-
-    res.status(status).json(errorResponse)
   } finally {
     // 清理资源
     if (abortController) {
@@ -848,10 +872,34 @@ const handleModelsEndpoint = async (req, res) => {
     let models = []
 
     if (account) {
-      // 获取实际的模型列表
-      models = await getAvailableModels(account.accessToken, account.proxy)
+      // 获取实际的模型列表（失败时回退到默认列表，避免影响 /v1/models 可用性）
+      try {
+        const oauthProvider = account.oauthProvider || 'gemini-cli'
+        models =
+          oauthProvider === 'antigravity'
+            ? await geminiAccountService.fetchAvailableModelsAntigravity(
+                account.accessToken,
+                account.proxy,
+                account.refreshToken
+              )
+            : await getAvailableModels(account.accessToken, account.proxy)
+      } catch (error) {
+        logger.warn('Failed to get Gemini models list from upstream, fallback to default:', error)
+        models = []
+      }
     } else {
       // 返回默认模型列表
+      models = [
+        {
+          id: 'gemini-2.0-flash-exp',
+          object: 'model',
+          created: Math.floor(Date.now() / 1000),
+          owned_by: 'google'
+        }
+      ]
+    }
+
+    if (!models || models.length === 0) {
       models = [
         {
           id: 'gemini-2.0-flash-exp',
