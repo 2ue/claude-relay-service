@@ -34,7 +34,6 @@ jobs:
           [ -z "$file" ] && continue
           if [[ ! "$file" =~ \.(md|txt)$ ]] &&
              [[ ! "$file" =~ ^docs/ ]] &&
-             [[ ! "$file" =~ ^\.github/ ]] &&
              [[ "$file" != "VERSION" ]] &&
              [[ "$file" != ".gitignore" ]]; then
             SIGNIFICANT_CHANGES=true
