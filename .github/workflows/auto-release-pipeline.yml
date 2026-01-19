@@ -4,13 +4,7 @@ on:
   push:
     branches:
       - main
-      - alpha
   workflow_dispatch:  # 支持手动触发
-    inputs:
-      prerelease:
-        description: '是否为预发布版本'
-        type: boolean
-        default: false
 
 permissions:
   contents: write
@@ -133,45 +127,20 @@ jobs:
       id: next_version
       run: |
         VERSION="${{ steps.get_version.outputs.current_version }}"
-        BRANCH="${{ github.ref_name }}"
-        IS_PRERELEASE="false"
-
-        # 判断是否为预发布（alpha 分支或手动指定）
-        if [ "$BRANCH" = "alpha" ] || [ "${{ inputs.prerelease }}" = "true" ]; then
-          IS_PRERELEASE="true"
-        fi
-
-        # 清理版本号中的预发布后缀以获取基础版本
-        BASE_VERSION=$(echo "$VERSION" | sed -E 's/-(alpha|beta|rc)\.[0-9]+$//')
-
+        
         # 分割版本号
-        IFS='.' read -r -a version_parts <<< "$BASE_VERSION"
+        IFS='.' read -r -a version_parts <<< "$VERSION"
         MAJOR="${version_parts[0]:-0}"
         MINOR="${version_parts[1]:-0}"
         PATCH="${version_parts[2]:-0}"
-
-        if [ "$IS_PRERELEASE" = "true" ]; then
-          # Alpha 版本：检查是否已有 alpha 版本，递增 alpha 序号
-          LATEST_ALPHA=$(git tag -l "v${MAJOR}.${MINOR}.*-alpha.*" | sort -V | tail -1 || echo "")
-          if [ -n "$LATEST_ALPHA" ]; then
-            # 提取 alpha 序号并递增
-            ALPHA_NUM=$(echo "$LATEST_ALPHA" | sed -E 's/.*-alpha\.([0-9]+)$/\1/')
-            NEW_ALPHA_NUM=$((ALPHA_NUM + 1))
-          else
-            NEW_ALPHA_NUM=1
-          fi
-          NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}-alpha.${NEW_ALPHA_NUM}"
-        else
-          # 正式版本：递增 patch 版本
-          NEW_PATCH=$((PATCH + 1))
-          NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
-        fi
-
+        
+        # 默认递增patch版本
+        NEW_PATCH=$((PATCH + 1))
+        NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
+        
         echo "New version: $NEW_VERSION"
-        echo "Is prerelease: $IS_PRERELEASE"
         echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
         echo "new_tag=v$NEW_VERSION" >> $GITHUB_OUTPUT
-        echo "is_prerelease=$IS_PRERELEASE" >> $GITHUB_OUTPUT
 
     - name: Update VERSION file
       if: steps.check.outputs.needs_bump == 'true'
@@ -293,9 +262,8 @@ jobs:
       if: steps.check.outputs.needs_bump == 'true'
       run: |
         NEW_TAG="${{ steps.next_version.outputs.new_tag }}"
-        BRANCH="${{ github.ref_name }}"
         git tag -a "$NEW_TAG" -m "Release $NEW_TAG"
-        git push origin HEAD:$BRANCH "$NEW_TAG"
+        git push origin HEAD:main "$NEW_TAG"
 
     - name: Prepare image names
       id: image_names
@@ -319,28 +287,26 @@ jobs:
       uses: softprops/action-gh-release@v1
       with:
         tag_name: ${{ steps.next_version.outputs.new_tag }}
-        name: Release ${{ steps.next_version.outputs.new_version }}${{ steps.next_version.outputs.is_prerelease == 'true' && ' (Alpha)' || '' }}
+        name: Release ${{ steps.next_version.outputs.new_version }}
         body: |
-          ${{ steps.next_version.outputs.is_prerelease == 'true' && '⚠️ **这是预发布版本，仅供测试使用**' || '' }}
-
           ## 🐳 Docker 镜像
-
+          
           ```bash
           docker pull ${{ steps.image_names.outputs.docker_image }}:${{ steps.next_version.outputs.new_tag }}
+          docker pull ${{ steps.image_names.outputs.docker_image }}:latest
           docker pull ${{ steps.image_names.outputs.ghcr_image }}:${{ steps.next_version.outputs.new_tag }}
-          ${{ steps.next_version.outputs.is_prerelease != 'true' && format('docker pull {0}:latest', steps.image_names.outputs.docker_image) || '' }}
-          ${{ steps.next_version.outputs.is_prerelease != 'true' && format('docker pull {0}:latest', steps.image_names.outputs.ghcr_image) || '' }}
+          docker pull ${{ steps.image_names.outputs.ghcr_image }}:latest
           ```
-
+          
           ## 📦 主要更新
-
+          
           ${{ steps.changelog.outputs.content }}
-
+          
           ## 📋 完整更新日志
-
+          
           查看 [所有版本](https://github.com/${{ github.repository }}/releases)
         draft: false
-        prerelease: ${{ steps.next_version.outputs.is_prerelease == 'true' }}
+        prerelease: false
         generate_release_notes: true
 
     # 自动清理旧的tags和releases（保持最近50个）
@@ -468,30 +434,6 @@ jobs:
         username: ${{ github.repository_owner }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Prepare Docker tags
-      if: steps.check.outputs.needs_bump == 'true'
-      id: docker_tags
-      run: |
-        DOCKER_IMAGE="${{ steps.image_names.outputs.docker_image }}"
-        GHCR_IMAGE="${{ steps.image_names.outputs.ghcr_image }}"
-        VERSION="${{ steps.next_version.outputs.new_version }}"
-        TAG="${{ steps.next_version.outputs.new_tag }}"
-        IS_PRERELEASE="${{ steps.next_version.outputs.is_prerelease }}"
-
-        # 基础 tags（版本号）
-        TAGS="${DOCKER_IMAGE}:${TAG}"
-        TAGS="${TAGS},${DOCKER_IMAGE}:${VERSION}"
-        TAGS="${TAGS},${GHCR_IMAGE}:${TAG}"
-        TAGS="${TAGS},${GHCR_IMAGE}:${VERSION}"
-
-        # 正式版本才推 latest
-        if [ "$IS_PRERELEASE" != "true" ]; then
-          TAGS="${TAGS},${DOCKER_IMAGE}:latest"
-          TAGS="${TAGS},${GHCR_IMAGE}:latest"
-        fi
-
-        echo "tags=${TAGS}" >> $GITHUB_OUTPUT
-
     - name: Build and push Docker image
       if: steps.check.outputs.needs_bump == 'true'
       uses: docker/build-push-action@v6
@@ -499,7 +441,13 @@ jobs:
         context: .
         platforms: linux/amd64,linux/arm64
         push: true
-        tags: ${{ steps.docker_tags.outputs.tags }}
+        tags: |
+          ${{ steps.image_names.outputs.docker_image }}:${{ steps.next_version.outputs.new_tag }}
+          ${{ steps.image_names.outputs.docker_image }}:latest
+          ${{ steps.image_names.outputs.docker_image }}:${{ steps.next_version.outputs.new_version }}
+          ${{ steps.image_names.outputs.ghcr_image }}:${{ steps.next_version.outputs.new_tag }}
+          ${{ steps.image_names.outputs.ghcr_image }}:latest
+          ${{ steps.image_names.outputs.ghcr_image }}:${{ steps.next_version.outputs.new_version }}
         labels: |
           org.opencontainers.image.version=${{ steps.next_version.outputs.new_version }}
           org.opencontainers.image.revision=${{ github.sha }}
@@ -514,50 +462,37 @@ jobs:
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         DOCKER_IMAGE: ${{ steps.image_names.outputs.docker_image }}
         GHCR_IMAGE: ${{ steps.image_names.outputs.ghcr_image }}
-        IS_PRERELEASE: ${{ steps.next_version.outputs.is_prerelease }}
       continue-on-error: true
       run: |
         VERSION="${{ steps.next_version.outputs.new_version }}"
         TAG="${{ steps.next_version.outputs.new_tag }}"
         REPO="${{ github.repository }}"
-
+        
         # 获取更新内容并限制长度
         CHANGELOG="${{ steps.changelog.outputs.content }}"
         CHANGELOG_TRUNCATED=$(echo "$CHANGELOG" | head -c 1000)
         if [ ${#CHANGELOG} -gt 1000 ]; then
           CHANGELOG_TRUNCATED="${CHANGELOG_TRUNCATED}..."
         fi
-
-        # 构建消息内容（区分正式版和预发布版）
-        if [ "$IS_PRERELEASE" = "true" ]; then
-          MESSAGE="🧪 *Claude Relay Service Alpha 版本发布！*"$'\n'$'\n'
-          MESSAGE+="⚠️ _这是预发布版本，仅供测试使用_"$'\n'$'\n'
-        else
-          MESSAGE="🚀 *Claude Relay Service 新版本发布！*"$'\n'$'\n'
-        fi
-
+        
+        # 构建消息内容
+        MESSAGE="🚀 *Claude Relay Service 新版本发布！*"$'\n'$'\n'
         MESSAGE+="📦 版本号: \`${VERSION}\`"$'\n'$'\n'
         MESSAGE+="📝 *更新内容:*"$'\n'
         MESSAGE+="${CHANGELOG_TRUNCATED}"$'\n'$'\n'
         MESSAGE+="🐳 *Docker 部署:*"$'\n'
         MESSAGE+="\`\`\`bash"$'\n'
         MESSAGE+="docker pull ${DOCKER_IMAGE}:${TAG}"$'\n'
+        MESSAGE+="docker pull ${DOCKER_IMAGE}:latest"$'\n'
         MESSAGE+="docker pull ${GHCR_IMAGE}:${TAG}"$'\n'
-        if [ "$IS_PRERELEASE" != "true" ]; then
-          MESSAGE+="docker pull ${DOCKER_IMAGE}:latest"$'\n'
-          MESSAGE+="docker pull ${GHCR_IMAGE}:latest"$'\n'
-        fi
+        MESSAGE+="docker pull ${GHCR_IMAGE}:latest"$'\n'
         MESSAGE+="\`\`\`"$'\n'$'\n'
         MESSAGE+="🔗 *相关链接:*"$'\n'
         MESSAGE+="• [GitHub Release](https://github.com/${REPO}/releases/tag/${TAG})"$'\n'
         MESSAGE+="• [完整更新日志](https://github.com/${REPO}/releases)"$'\n'
         MESSAGE+="• [Docker Hub](https://hub.docker.com/r/${DOCKER_IMAGE%/*}/claude-relay-service)"$'\n'
         MESSAGE+="• [GHCR](https://ghcr.io/${GHCR_IMAGE#ghcr.io/})"$'\n'$'\n'
-        if [ "$IS_PRERELEASE" = "true" ]; then
-          MESSAGE+="#ClaudeRelay #Alpha #v${VERSION//./_}"
-        else
-          MESSAGE+="#ClaudeRelay #Update #v${VERSION//./_}"
-        fi
+        MESSAGE+="#ClaudeRelay #Update #v${VERSION//./_}"
         
         # 使用 jq 构建 JSON 并发送
         jq -n \
