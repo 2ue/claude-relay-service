@@ -594,7 +594,6 @@ const droidConfigExample = `{
 }`
 
 const tutorialImages = {
-  logo: new URL('../../../../2026-01-19/assets/img_94434f59_0.png', import.meta.url).href,
   vsCodeEntry: new URL('../assets/tutorial/img_94434f59_1.png', import.meta.url).href,
   vsCodeSearch: new URL('../assets/tutorial/img_94434f59_2.png', import.meta.url).href,
   vsCodeSidebar: new URL('../assets/tutorial/img_94434f59_3.png', import.meta.url).href,
@@ -603,7 +602,7 @@ const tutorialImages = {
   vsCodeInputKey: new URL('../assets/tutorial/img_94434f59_6.png', import.meta.url).href,
   vsCodeContinue: new URL('../assets/tutorial/img_94434f59_7.png', import.meta.url).href,
   vsCodeSuccess: new URL('../assets/tutorial/img_94434f59_8.png', import.meta.url).href,
-  supportQr: new URL('../../../../2026-01-19/assets/img_94434f59_9.png', import.meta.url).href
+  supportQr: new URL('../assets/tutorial/img_94434f59_9.png', import.meta.url).href
 }
 </script>
 
